@@ -3,15 +3,31 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct queue queue;
+
+struct queue {
+  queue *head;
+};
+
+typedef struct queue_node queue_node;
+struct queue_node {
+  queue_node *next;
+};
+
 typedef struct {
   void **data;
   int cap;
   int len;
   int size;
 
+  queue *recv;
+  queue *send;
+
   pthread_mutex_t mut;
+
   pthread_cond_t received;
   pthread_cond_t consumed;
+
 } channel;
 
 channel *make_channel(int cap, int size) {
@@ -33,6 +49,9 @@ channel *make_channel(int cap, int size) {
   ch->size = size;
   ch->len = 0;
 
+  ch->send->head = NULL;
+  ch->recv->head = NULL;
+
   pthread_mutex_init(&ch->mut, NULL);
   pthread_cond_init(&ch->received, NULL);
   pthread_cond_init(&ch->consumed, NULL);
@@ -40,7 +59,7 @@ channel *make_channel(int cap, int size) {
   return ch;
 }
 
-void *pop_channel(channel *ch) {
+static void *pop_from_channel(channel *ch) {
   pthread_mutex_lock(&ch->mut);
   while (!ch->len) {
     printf("data tried to get but channel is empty \n");
@@ -58,7 +77,9 @@ void *pop_channel(channel *ch) {
   return ret;
 }
 
-void push_channel(channel *ch, void *data) {
+void *pop_channel(channel *ch) { return pop_from_channel(ch); }
+
+static void push_from_channel(channel *ch, void *data) {
   pthread_mutex_lock(&ch->mut);
   while (ch->cap == ch->len) {
     printf("data tried to sent but channel is full \n");
@@ -72,6 +93,10 @@ void push_channel(channel *ch, void *data) {
   pthread_cond_signal(&ch->received);
 
   pthread_mutex_unlock(&ch->mut);
+}
+
+void push_channel(channel *ch, void *data) {
+  return push_from_channel(ch, data);
 }
 
 void free_channel(channel *ch) {
