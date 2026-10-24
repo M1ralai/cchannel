@@ -11,7 +11,7 @@ typedef char *cgc_body;
 
 typedef struct {
   char key[32];
-  char value[];
+  char value[256];
 } cgc_header;
 
 typedef struct {

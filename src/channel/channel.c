@@ -20,7 +20,7 @@ struct queue_node {
 
 // TODO: pointer lari yerine nesnelerin kendilerinin tutulmasi icin
 // size degiskeni acik birakildi
-typedef struct {
+typedef struct channel {
   void **data;
   int cap;
   int len;
@@ -94,7 +94,7 @@ static void *pop_from_channel(channel *ch) {
     pthread_cond_wait(&ch->received, &ch->mut);
   }
 
-  ch->len++;
+  ch->len--;
   void *ret = ch->data[ch->head];
   ch->head = (ch->head + 1) % ch->cap;
 
