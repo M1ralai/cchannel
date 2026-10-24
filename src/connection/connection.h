@@ -11,5 +11,6 @@ typedef struct cgc_worker cgc_worker;
 typedef struct cgc_srv cgc_srv;
 
 cgc_srv *new_server();
+void start_server(cgc_srv *srv);
 
 #endif

@@ -12,4 +12,5 @@ int main() {
   cgc_logger_new();
   logger.Info("Main function started");
   cgc_srv *srv = new_server();
+  start_server(srv);
 }

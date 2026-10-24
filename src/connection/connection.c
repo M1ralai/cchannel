@@ -1,9 +1,11 @@
 #include "connection.h"
-#include "../channel/channel.c"
+#include "../channel/channel.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int quit_signal = -1;
 
 typedef char *cgc_body;
 
@@ -33,7 +35,6 @@ static int worker_id;
 struct cgc_worker {
   int id;
   enum cgc_worker_status status;
-  channel *quit;
   channel *client;
 
   char buffer[WORKER_BUFFER_SIZE];
@@ -42,11 +43,10 @@ struct cgc_worker {
 
 pthread_t worker_threads[WORKER_COUNT];
 
-static cgc_worker *new_worker(channel *quit, channel *client) {
+static cgc_worker *new_worker(channel *client) {
   cgc_worker *ret = malloc(sizeof(cgc_worker));
   ret->id = worker_id;
   ret->status = READY;
-  ret->quit = quit;
   ret->client = client;
   worker_id++;
 
@@ -61,8 +61,15 @@ static void *quit_worker(void *argc) {
 static void *start_worker(void *arg) {
   cgc_worker *worker = (cgc_worker *)arg;
   logger.Info("worker is started running, id: %d status %s", worker->id,
-              worker->status ? "READY" : "BUSY");
-  pthread_t t_quit, t_client;
+              worker->status == READY ? "READY" : "BUSY");
+  while (1) {
+    int *data = (int *)pop_channel(worker->client);
+    if (*data == -1) {
+      logger.Info("worker %d is closing, channel return value is %d",
+                  worker->id, *data);
+      return NULL;
+    }
+  }
   return NULL;
 }
 
@@ -70,10 +77,10 @@ typedef struct cgc_worker_pool {
   cgc_worker *workers[WORKER_COUNT];
 } cgc_worker_pool;
 
-static cgc_worker_pool new_worker_pool(channel *quit, channel *client) {
+static cgc_worker_pool new_worker_pool(channel *client) {
   cgc_worker_pool ret;
   for (int i = 0; i < WORKER_COUNT; i++) {
-    ret.workers[i] = new_worker(quit, client);
+    ret.workers[i] = new_worker(client);
     logger.Info("worker %d initialized with %zu byte", i,
                 sizeof(*ret.workers[i]));
   }
@@ -81,7 +88,6 @@ static cgc_worker_pool new_worker_pool(channel *quit, channel *client) {
 }
 
 struct cgc_srv {
-  channel *quit;
   channel *client;
 
   cgc_worker_pool pool;
@@ -90,19 +96,26 @@ struct cgc_srv {
 void start_server(cgc_srv *srv) {
   for (int i = 0; i < WORKER_COUNT; ++i) {
     pthread_create(&worker_threads[i], NULL, start_worker,
-                   &srv->pool.workers[i]);
+                   srv->pool.workers[i]);
   }
   while (1) {
     char ch;
     scanf("%c", &ch);
     if (ch == 'q') {
-      logger.Error("system is quitting, waiting for threads");
-      push_channel(srv->quit, (int *)0);
+      logger.Info("system is quitting, waiting for threads");
+      for (int i = 0; i < WORKER_COUNT; ++i) {
+        push_channel(srv->client, &quit_signal);
+      }
+      break;
     }
   }
-  for (int i = 0; i < WORKER_COUNT; ++i) {
+
+  for (int i = 0; i < WORKER_COUNT; i++) {
     pthread_join(worker_threads[i], NULL);
+    logger.Info("worker %d joined", i);
   }
+
+  logger.Info("all workers terminated");
 }
 
 cgc_srv *new_server() {
@@ -111,9 +124,8 @@ cgc_srv *new_server() {
     logger.Error("malloc malfunctioned");
     return ret;
   }
-  ret->quit = make_channel((int)WORKER_COUNT);
   ret->client = make_channel((int)QUEUE_SIZE);
-  ret->pool = new_worker_pool(ret->quit, ret->client);
+  ret->pool = new_worker_pool(ret->client);
   logger.Info("worker pool initialized");
 
   return ret;

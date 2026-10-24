@@ -93,7 +93,6 @@ static void *pop_from_channel(channel *ch) {
   while (!ch->len) {
     pthread_cond_wait(&ch->received, &ch->mut);
   }
-  printf("data taken from channel\n");
 
   ch->len++;
   void *ret = ch->data[ch->head];
