@@ -6,8 +6,8 @@
 #include <string.h>
 
 static int quit_signal = -1;
-
 typedef char *cgc_body;
+typedef char *cgc_endpoint;
 
 typedef struct {
   char key[32];
@@ -18,12 +18,27 @@ typedef struct {
   cgc_header headers[MAX_HEADER];
   cgc_body body;
 } cgc_http_data;
-typedef void (*handle_func)(cgc_http_data *req, cgc_http_data *resp);
 
 typedef struct {
   cgc_http_data resp;
   cgc_http_data req;
 } cgc_data;
+typedef void (*cgc_handler_func)(cgc_http_data *req, cgc_http_data *resp);
+
+typedef struct cgc_handler_node cgc_handler_node;
+
+struct cgc_handler_node {
+  cgc_handler_node *left;
+  cgc_handler_node *right;
+  int height;
+
+  cgc_endpoint endpoint;
+  cgc_handler_func func;
+};
+
+typedef struct {
+  cgc_handler_node *head;
+} cgc_handler_pool;
 
 enum cgc_worker_status {
   READY = 0,
@@ -39,6 +54,7 @@ struct cgc_worker {
 
   char buffer[WORKER_BUFFER_SIZE];
   cgc_data data;
+  cgc_handler_pool *h_pool;
 };
 
 pthread_t worker_threads[WORKER_COUNT];
