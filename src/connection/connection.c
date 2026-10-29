@@ -150,9 +150,27 @@ static void *start_worker(void *arg) {
     free(data);
 
     logger.Info("worker %d accepted fd %d ", worker->id, fd);
-    sleep(2);
 
-    logger.Info("worker %d finished fd %d", worker->id, fd);
+    ssize_t n = recv(fd, worker->buffer, WORKER_BUFFER_SIZE, 0);
+    if (n == 0) {
+      logger.Info("client disconnected");
+      close(fd);
+      continue;
+    }
+
+    logger.Info("worker %d received %zd bytes", worker->id, n);
+
+    FILE *log_fd = fopen("request.log", "a");
+
+    if (log_fd == NULL) {
+      perror("fopen");
+    } else {
+      fwrite(worker->buffer, 1, (size_t)n, log_fd);
+      fclose(log_fd);
+    }
+
+    fwrite(worker->buffer, 1, (size_t)n, stdout);
+
     close(fd);
   }
   return NULL;
