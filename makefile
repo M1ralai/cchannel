@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS=-g -O0 -fsanitize=address,undefined -pthread
+CFLAGS=-g -O0 -fsanitize=address,undefined -pthread -Wall -Wextra -Wconversion -Wsign-conversion
 OUT=bin/out
 
 CFILES=src/main.c \
