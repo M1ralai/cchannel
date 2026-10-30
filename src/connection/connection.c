@@ -28,7 +28,7 @@ struct cgc_handler_node {
 
 typedef struct cgc_handler_tree {
   cgc_handler_node *head;
-  int size;
+  size_t size;
 } cgc_handler_tree;
 
 static cgc_handler_node *cgc_handler_tree_get(cgc_handler_tree *tree,
@@ -99,10 +99,10 @@ enum cgc_worker_status {
   BUSY = 1,
 };
 
-static int worker_id;
+static size_t worker_id;
 
 struct cgc_worker {
-  int id;
+  size_t id;
   enum cgc_worker_status status;
   channel *client;
 
@@ -152,6 +152,12 @@ static void *start_worker(void *arg) {
     logger.Info("worker %d accepted fd %d ", worker->id, fd);
 
     ssize_t n = recv(fd, worker->buffer, WORKER_BUFFER_SIZE, 0);
+    if (n <= 0) {
+      logger.Error("recieve error occured");
+      close(fd);
+      continue;
+    }
+
     if (n == 0) {
       logger.Info("client disconnected");
       close(fd);
@@ -165,11 +171,11 @@ static void *start_worker(void *arg) {
     if (log_fd == NULL) {
       perror("fopen");
     } else {
-      fwrite(worker->buffer, 1, (size_t)n, log_fd);
+      fwrite(worker->buffer, 1, n, log_fd);
       fclose(log_fd);
     }
 
-    fwrite(worker->buffer, 1, (size_t)n, stdout);
+    fwrite(worker->buffer, 1, n, stdout);
 
     close(fd);
   }
@@ -183,9 +189,9 @@ typedef struct cgc_worker_pool {
 static cgc_worker_pool new_worker_pool(channel *client,
                                        cgc_handler_tree *tree) {
   cgc_worker_pool ret;
-  for (int i = 0; i < WORKER_COUNT; i++) {
+  for (size_t i = 0; i < WORKER_COUNT; i++) {
     ret.workers[i] = new_worker(client, tree);
-    logger.Info("worker %d initialized with %zu byte", i,
+    logger.Info("worker %zu initialized with %zu byte", i,
                 sizeof(*ret.workers[i]));
   }
   return ret;
@@ -240,12 +246,16 @@ void register_endpoint(cgc_srv *srv, cgc_endpoint endpoint,
 }
 
 void start_server(cgc_srv *srv) {
-  for (int i = 0; i < WORKER_COUNT; ++i) {
+  for (size_t i = 0; i < WORKER_COUNT; ++i) {
     pthread_create(&worker_threads[i], NULL, start_worker,
                    srv->pool.workers[i]);
   }
 
   int listener = create_listener();
+  if (listener < 0) {
+    logger.Error("create listener error occured");
+    return;
+  }
 
   while (1) {
     int fd = accept(listener, NULL, NULL);
@@ -265,7 +275,7 @@ void start_server(cgc_srv *srv) {
     push_channel(srv->client, client_fd);
   }
 
-  for (int i = 0; i < WORKER_COUNT; i++) {
+  for (size_t i = 0; i < WORKER_COUNT; i++) {
     pthread_join(worker_threads[i], NULL);
     logger.Info("worker %d joined", i);
   }
@@ -279,7 +289,7 @@ cgc_srv *new_server() {
     logger.Error("malloc malfunctioned");
     return ret;
   }
-  ret->client = make_channel((int)QUEUE_SIZE);
+  ret->client = make_channel((size_t)QUEUE_SIZE);
   ret->h_tree = new_handler_tree();
   ret->pool = new_worker_pool(ret->client, ret->h_tree);
   logger.Info("worker pool initialized");
